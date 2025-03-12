@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+  .bar--allocation {
+    fill: steelblue;
+  }
+
+  .bar--request {
+    fill: darkorange;
+  }
+
+  .bar--diff-positive {
+    fill: green;
+  }
+
+  .bar--diff-negative {
+    fill: red;
+  }
+
+  .axis text {
+    font: 10px sans-serif;
+  }
+
+  .axis path,
+  .axis line {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+  }
+
+  .pane {
+    display: block;
+    overflow: scroll;
+  }
+
+  table {
+    border: 1px solid #ddd;
+  }
+
+  td {
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+
+  #clubList {
+    height: 500px;
+    overflow: scroll;
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+
+  .svgHolder {
+    height: 500px;
+    overflow: scroll;
+  }
+</style>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script>
+  var selection = [];
+
+  function getSelection() {
+    return selection;
+  }
+
+  function setSelection(newSelection) {
+    selection = newSelection;
+  }
+
+  function addSelection(clubName) {
+    sel = getSelection();
+    sel.push(clubName);
+    setSelection(sel);
+    generateSVG(selection);
+  }
+
+  function generateClubList() {
+    var ul = document.getElementById("clubList");
+
+    d3.csv("ASUC Data - 2014-2015.csv", function(error, data) {
+      for (i = 0; i < data.length; i++) {
+        d = data[i];
+
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.innerHTML = d.Name;
+        a.href = "#";
+        a.setAttribute("onclick", "addSelection(\"" + d.Name + "\")");
+
+        li.appendChild(a);
+        li.setAttribute("id", "club-" + d.Name);
+        ul.appendChild(li);
+      }
+    })
+  }
+
+  function filterSelection() {
+    var userInput, filter, ul, li, a, i;
+
+    userInput = document.getElementById('filterInput');
+    filter = userInput.value.toUpperCase();
+    ul = document.getElementById("clubList");
+    li = ul.getElementsByTagName("li");
+
+    for (i = 0; i < li.length; i++) {
+      a = li[i].getElementsByTagName("a")[0];
+      if (a.innerHTML.toUpperCase().indexOf(filter) > -1) {
+        li[i].style.display = "";
+      } else {
+        li[i].style.display = "none";
+      }
+    }
+  }
+
+  function generateSVG(selection) {
+    /*
+    function filter(selection, d) {
+      if (d.Name in selection) return "hidden";
+    }
+    */
+
+    var margin = {top: 20, right: 30, bottom: 40, left: 180},
+        width = 1000 - margin.left - margin.right,
+        height = 1000 - margin.top - margin.bottom;
+
+    var x = d3.scale.linear()
+        .range([0, width]);
+
+    var y = d3.scale.ordinal()
+        .rangeRoundBands([0, height], 0.1);
+
+    var xAxis = d3.svg.axis()
+        .scale(x)
+        .orient("top");
+
+    var yAxis = d3.svg.axis()
+        .scale(y)
+        .orient("left")
+        .tickSize(0)
+        .tickPadding(6);
+
+    d3.select("svg").remove();
+    var svg = d3.select(".svgHolder").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    d3.csv("ASUC Data - 2014-2015.csv", function(error, data) {
+      data = data.filter(function (d) { return (selection.includes(d.Name))});
+
+      height = data.length * 50 - margin.top - margin.bottom;
+      y = d3.scale.ordinal()
+          .rangeRoundBands([0, height], 0.1);
+
+      yAxis = d3.svg.axis()
+          .scale(y)
+          .orient("left")
+          .tickSize(0)
+          .tickPadding(6);
+
+      x.domain([d3.min(data, function(d) {return d3.min([+d['Final Allocation'], +d['Funding Request']])}),
+                d3.max(data, function(d) {return d3.max([+d['Final Allocation'], +d['Funding Request']])})]);
+      y.domain(data.map(function(d) {return d.Name}));
+
+      svg.selectAll("svg")
+          .data(data)
+        .enter().append("rect")
+          .attr("class", function(d) { return "bar bar--diff-" + ((+d['Final Allocation'] - +d['Funding Request']) > 0 ? "positive" : "negative")})
+          .attr("x", function(d) { return x(Math.min(+d['Funding Request'], +d['Final Allocation'])) - y.rangeBand() / 4; })
+          .attr("y", function(d) { return y(d.Name) + y.rangeBand() / 4; })
+          .attr("width", function(d) { return Math.abs(x(+d['Funding Request']) - x(+d['Final Allocation'])); })
+          .attr("height", y.rangeBand() / 2);
+
+      svg.selectAll("svg")
+          .data(data)
+        .enter().append("rect")
+          .attr("class", "bar bar--allocation")
+          .attr("rx", 3)
+          .attr("ry", 3)
+          .attr("x", function(d) { return x(+d['Final Allocation']) - y.rangeBand() / 4; })
+          .attr("y", function(d) { return y(d.Name); })
+          .attr("width", y.rangeBand() / 2)
+          .attr("height", y.rangeBand());
+
+      svg.selectAll("svg")
+          .data(data)
+        .enter().append("rect")
+          .attr("class", "bar bar--request")
+          .attr("rx", 3)
+          .attr("ry", 3)
+          .attr("x", function(d) { return x(+d['Funding Request']) - y.rangeBand() / 4; })
+          .attr("y", function(d) { return y(d.Name); })
+          .attr("width", y.rangeBand() / 2)
+          .attr("height", y.rangeBand());
+
+      svg.append("g")
+          .attr("class", "x axis")
+          .attr("transform", "translate(0, 0)")
+          .call(xAxis);
+
+      svg.append("g")
+          .attr("class", "y axis")
+          .attr("transform", "translate(" + x(0) + ",0)")
+          .call(yAxis);
+    });
+  }
+</script>
+<body>
+  <div class="pane">
+    <table>
+      <tr>
+        <td>
+          <input type="text" id="filterInput" onkeyup="filterSelection()" placeholder="Search for a club"></input>
+          <ul id="clubList">
+            <script>
+              generateClubList();
+            </script>
+          </ul>
+        </td>
+
+        <td>
+          <div class="svgHolder">
+            <script>
+              addSelection('Berkeley Fiction Review');
+            </script>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
